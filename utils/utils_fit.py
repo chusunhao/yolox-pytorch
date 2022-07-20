@@ -76,6 +76,9 @@ import utils.se3lib as se3lib
 #     # outputs[..., [1, 3]] = outputs[..., [1, 3]] / input_shape[0]
 #     return outputs
 
+def pose_err(est_pose, gt_pose):
+    pass
+
 
 def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step,
                   epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0):
@@ -154,7 +157,7 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
 
     # stats = np.zeros((len(gen_val), 3))
 
-    for iteration, batch in enumerate(tqdm(gen_val)):
+    for iteration, batch in enumerate(gen_val):
         if iteration >= epoch_step_val:
             break
         images, targets, poses = batch[0], batch[1], batch[2]

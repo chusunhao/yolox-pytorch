@@ -326,7 +326,7 @@ class YOLOLoss(nn.Module):
     def recoverXYZ(self, bbox, offset, depth):
         K = torch.tensor([[1744.92206139719, 0, 737.272795902663], [0, 1746.58640701753, 528.471960188736], [0, 0, 1]]).cuda()
         b, num_anchors, _ = bbox.shape
-        p = torch.concat(((bbox[..., 0:2] + offset), torch.ones_like(depth)), dim=-1)
+        p = torch.cat(((bbox[..., 0:2] + offset), torch.ones_like(depth)), dim=-1)
         P = torch.matmul(torch.linalg.inv(K).repeat(b*num_anchors, 1, 1), (depth.repeat(1, 1, 3) * p).view(-1, 3, 1))
         return P.view(b, num_anchors, 3)
 

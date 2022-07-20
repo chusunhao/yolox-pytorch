@@ -51,15 +51,15 @@ def generate_label(K, pose, list_file):
 
 if __name__ == "__main__":
 
-    label_txt = "./datasets/spark_2022_stream_2/val.txt"
+    label_txt = "./datasets/spark_2022_stream_2/train.txt"
     list_file = open(label_txt, 'w', encoding='utf-8')
     transform = transforms.Compose([transforms.ToPILImage(),
                                     transforms.ToTensor(),
                                     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                                           std=[0.229, 0.224, 0.225])])
 
-    imgs_dir = "./datasets/spark_2022_stream_2/val/images"
-    labels_file = "./datasets/spark_2022_stream_2/val/val.csv"
+    imgs_dir = "./datasets/spark_2022_stream_2/train/images"
+    labels_file = "./datasets/spark_2022_stream_2/train/train.csv"
     train_ds = SparkDataset(imgs_dir, labels_file, augment=False, data_transform=transform)
     K = train_ds.K
 
