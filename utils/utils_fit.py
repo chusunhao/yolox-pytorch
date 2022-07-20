@@ -81,7 +81,9 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
     else:
         model_train_eval = model_train.eval()
 
-    for iteration, batch in enumerate(gen_val):
+    stats = np.zeros((len(gen_val), 3))
+
+    for iteration, batch in enumerate(tqdm(gen_val)):
         if iteration >= epoch_step_val:
             break
         images, targets, poses = batch[0], batch[1], batch[2]
@@ -102,6 +104,17 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
             #   计算损失
             # ----------------------#
             loss_value = yolo_loss(outputs, targets)
+
+            # Evaluate error
+            posit_err, rel_posit_err, orient_err = pose_err(est_pose, gt_pose)
+
+            # Collect statistics
+            stats[val_samples - batch_size:val_samples, 0] = posit_err.cpu().numpy()
+            stats[val_samples - batch_size:val_samples, 1] = orient_err.cpu().numpy()
+            stats[val_samples - batch_size:val_samples, 2] = rel_posit_err.cpu().numpy()
+
+            pbar.desc = "Pose error: {:.3f}[m], {:.3f}[deg]".format(
+                posit_err.mean().item(), orient_err.mean().item())
 
         val_loss += loss_value.item()
         if local_rank == 0:
