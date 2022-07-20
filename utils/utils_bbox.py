@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torchvision.ops import nms, boxes
+import utils.se3lib as se3lib
 
 
 def yolo_correct_boxes(box_xy, box_wh, input_shape, image_shape, letterbox_image):
@@ -37,17 +38,17 @@ def decode_outputs(outputs, input_shape):
     hw = [x.shape[-2:] for x in outputs]
     # ---------------------------------------------------#
     #   outputs输入前代表每个特征层的预测结果
-    #   batch_size, 4 + 1 + num_classes, 80, 80 => batch_size, 4 + 1 + num_classes, 6400
-    #   batch_size, 5 + num_classes, 40, 40
-    #   batch_size, 5 + num_classes, 20, 20
-    #   batch_size, 4 + 1 + num_classes, 6400 + 1600 + 400 -> batch_size, 4 + 1 + num_classes, 8400
-    #   堆叠后为batch_size, 8400, 5 + num_classes
+    #   batch_size, 4 + 1 + num_classes + 3 + 9, 80, 80 => batch_size, 4 + 1 + num_classes, 6400
+    #   batch_size, 4 + 1 + num_classes + 3 + 9, 40, 40
+    #   batch_size, 4 + 1 + num_classes + 3 + 9, 20, 20
+    #   batch_size, 4 + 1 + num_classes + 3 + 9, 6400 + 1600 + 400 -> batch_size, 4 + 1 + num_classes, 8400
+    #   堆叠后为batch_size, 8400, 4 + 1 + num_classes + 3 + 9
     # ---------------------------------------------------#
     outputs = torch.cat([x.flatten(start_dim=2) for x in outputs], dim=2).permute(0, 2, 1)
     # ---------------------------------------------------#
     #   获得每一个特征点属于每一个种类的概率
     # ---------------------------------------------------#
-    outputs[:, :, 4:] = torch.sigmoid(outputs[:, :, 4:])
+    outputs[:, :, 4:6] = torch.sigmoid(outputs[:, :, 4:6])
     for h, w in hw:
         # ---------------------------#
         #   根据特征层的高宽生成网格点
@@ -78,16 +79,34 @@ def decode_outputs(outputs, input_shape):
     # ------------------------#
     outputs[..., :2] = (outputs[..., :2] + grids) * strides
     outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
+
+    bbox_preds = outputs[:, :, :4]
+    offset_preds = outputs[:, :, 6:8]
+    depth_preds = outputs[:, :, 8:9]
+    loc_preds = recoverXYZ(bbox_preds, offset_preds, depth_preds)
+    outputs[..., 6:9] = loc_preds
+    rot_preds = outputs[:, :, 9:]
+    b, num_channels, _ = rot_preds.shape
+    outputs[..., 9:] = se3lib.symmetric_orthogonalization(rot_preds.view(-1, 9)).reshape(b, num_channels, 9)
+
     # -----------------#
-    #   归一化
+    #   归一化bbox
     # -----------------#
     outputs[..., [0, 2]] = outputs[..., [0, 2]] / input_shape[1]
     outputs[..., [1, 3]] = outputs[..., [1, 3]] / input_shape[0]
     return outputs
 
 
+def recoverXYZ(bbox, offset, depth):
+    K = torch.tensor(
+        [[1744.92206139719, 0, 737.272795902663], [0, 1746.58640701753, 528.471960188736], [0, 0, 1]]).cuda()
+    b, num_anchors, _ = bbox.shape
+    p = torch.concat(((bbox[..., 0:2] + offset), torch.ones_like(depth)), dim=-1)
+    P = torch.matmul(torch.linalg.inv(K).repeat(b * num_anchors, 1, 1), (depth.repeat(1, 1, 3) * p).view(-1, 3, 1))
+    return P.view(b, num_anchors, 3)
+
 def non_max_suppression(prediction, num_classes, input_shape, image_shape, letterbox_image, conf_thres=0.5,
-                        nms_thres=0.4):
+                        nms_thres=0.4, maxdet=None):
     # ----------------------------------------------------------#
     #   将预测结果的格式转换成左上角右下角的格式。
     #   prediction  [batch_size, num_anchors, 85]
@@ -116,6 +135,10 @@ def non_max_suppression(prediction, num_classes, input_shape, image_shape, lette
         # ----------------------------------------------------------#
         conf_mask = (image_pred[:, 4] * class_conf[:, 0] >= conf_thres).squeeze()
 
+        if maxdet == 1:
+            tmp = image_pred[:, 4] * class_conf[:, 0]
+            conf_mask = (image_pred[:, 4] * class_conf[:, 0] == tmp.max()).squeeze()
+
         if not image_pred.size(0):
             continue
         # -------------------------------------------------------------------------#
@@ -123,7 +146,10 @@ def non_max_suppression(prediction, num_classes, input_shape, image_shape, lette
         #   7的内容为：x1, y1, x2, y2, obj_conf, class_conf, class_pred
         # -------------------------------------------------------------------------#
         detections = torch.cat((image_pred[:, :5], class_conf, class_pred.float()), 1)
+
         detections = detections[conf_mask]
+        poses = image_pred[:, 6:]
+        poses = poses[conf_mask]
 
         nms_out_index = boxes.batched_nms(
             detections[:, :4],
@@ -132,7 +158,7 @@ def non_max_suppression(prediction, num_classes, input_shape, image_shape, lette
             nms_thres,
         )
 
-        output[i] = detections[nms_out_index]
+        output[i] = torch.cat((detections[nms_out_index], poses[nms_out_index]), 1)
 
         # #------------------------------------------#
         # #   获得预测结果中包含的所有种类

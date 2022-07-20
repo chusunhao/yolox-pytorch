@@ -82,9 +82,9 @@ class YOLOXHead(nn.Module):
             cls_feat = self.cls_convs[k](x)
             # ---------------------------------------------------#
             #   判断特征点所属的种类
-            #   80, 80, num_classes
-            #   40, 40, num_classes
-            #   20, 20, num_classes
+            #   batchsize, num_classes, 80, 80
+            #   batchsize, num_classes, 40, 40
+            #   batchsize, num_classes, 20, 20
             # ---------------------------------------------------#
             cls_output = self.cls_preds[k](cls_feat)
 
@@ -94,16 +94,16 @@ class YOLOXHead(nn.Module):
             reg_feat = self.reg_convs[k](x)
             # ---------------------------------------------------#
             #   特征点的回归系数
-            #   reg_pred 80, 80, 4
-            #   reg_pred 40, 40, 4
-            #   reg_pred 20, 20, 4
+            #   batchsize, 4, 80, 80
+            #   batchsize, 4, 40, 40
+            #   batchsize, 4, 20, 20
             # ---------------------------------------------------#
             reg_output = self.reg_preds[k](reg_feat)
             # ---------------------------------------------------#
             #   判断特征点是否有对应的物体
-            #   obj_pred 80, 80, 1
-            #   obj_pred 40, 40, 1
-            #   obj_pred 20, 20, 1
+            #   batchsize, 1, 80, 80
+            #   batchsize, 1, 40, 40
+            #   batchsize, 1, 20, 20
             # ---------------------------------------------------#
             obj_output = self.obj_preds[k](reg_feat)
 
@@ -113,11 +113,11 @@ class YOLOXHead(nn.Module):
             loc_feat = self.loc_convs[k](x)
             # ---------------------------------------------------#
             #   回归offset, depth
-            #   80, 80, 3
-            #   40, 40, 3
-            #   20, 20, 3
+            #   batchsize, 3, 80, 80
+            #   batchsize, 3, 40, 40
+            #   batchsize, 3, 20, 20
             # ---------------------------------------------------#
-            loc_output = self.loc_preds[k](cls_feat)
+            loc_output = self.loc_preds[k](loc_feat)
 
             # ---------------------------------------------------#
             #   利用两个卷积标准化激活函数来进行特征提取
@@ -125,11 +125,11 @@ class YOLOXHead(nn.Module):
             ori_feat = self.ori_convs[k](x)
             # ---------------------------------------------------#
             #   回归rotation参数
-            #   80, 80, num_parameter
-            #   40, 40, num_parameter
-            #   20, 20, num_parameter
+            #   batchsize, num_parameter, 80, 80
+            #   batchsize, num_parameter, 40, 40
+            #   batchsize, num_parameter, 20, 20
             # ---------------------------------------------------#
-            ori_output = self.ori_preds[k](cls_feat)
+            ori_output = self.ori_preds[k](ori_feat)
 
             output = torch.cat([reg_output, obj_output, cls_output, loc_output, ori_output], 1)
             outputs.append(output)
