@@ -2,12 +2,13 @@
 map_out/
 miou_out/
 VOCdevkit/
-datasets/
+datasets/spark_2022_stream_2
 Medical_Datasets/
 lfw/
 logs/
-model_data/
+model_data/*.pth
 .temp_map_out/
+.idea
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
