@@ -1,4 +1,5 @@
 import math
+import os
 from os import error
 import numpy as np
 import torch
@@ -16,6 +17,8 @@ rotation_dimension_map = {'svd': 9, 'ortho6d': 6, 'ortho5d': 5, 'quaternion': 4,
 """
 Numpy functions
 """
+
+os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 def basic_rotation(ang, unit='deg', axis='x'):
     "https://en.wikipedia.org/wiki/Rotation_matrix object rotation, not the frame"
@@ -434,6 +437,22 @@ def symmetric_orthogonalization(x):
     r = torch.matmul(u, vt)
     return r
 
+def symmetric_orthogonalization_linalg(x):
+    """Maps 9D input vectors onto SO(3) via symmetric orthogonalization.
+
+    x: shoud have size [batch_size, 9]
+
+    Output hase size [batch_size, 3, 3], where each inner 3x3 matrix is in SO(3).
+    """
+    m = x.view(-1, 3, 3)
+    u, s, v = torch.linalg.svd(m)
+    vt = torch.transpose(v, 1, 2)
+    det = torch.linalg.det(torch.matmul(u, vt))
+    det = det.view(-1, 1, 1)
+    vt = torch.cat((vt[:, :2, :], vt[:, -1:, :] * det), 1)
+    r = torch.matmul(u, vt)
+    return r
+
 
 
 
@@ -685,39 +704,15 @@ def quat_weighted_avg(Q, W):
 
 
 if __name__ == '__main__':
-    r = R.from_euler('z', 0, degrees=True)
-    print(r.as_matrix())
+    count = 0
+    for _ in tqdm.tqdm(range(int(1e10))):
 
-    print(r.as_quat())
+        raw = torch.rand((1, 9))
+        # R1 = symmetric_orthogonalization(raw)[0].numpy()
+        R2 = symmetric_orthogonalization_linalg(raw)[0].numpy()
 
-    # R_1 = np.array([[0.9734767, 0.06202098, 0.22021925],
-    #        [0.06198093, -0.9980521, 0.00709831],
-    #        [0.22023053, 0.00673936, -0.9754246]], dtype=np.float32)
-
-    # R_1_tensor = torch.from_numpy(R_1).unsqueeze(0)
-
-    # q = compute_quaternions_from_rotation_matrices(R_1_tensor)
-
-    # R = compute_rotation_matrix_from_quaternion(q)
-    # print(q)
-
-    # print(a_new)
-
-    # count = 0
-    # for _ in tqdm.tqdm(range(int(1e4))):
-
-    #     pitch = np.random.random(2)
-    #     yaw = np.random.random(2)
-    #     roll = np.random.random(2)
-    #     R0 = euler2SO3(roll[0], pitch[0], yaw[0], unit="rad")
-    #     R1 = euler2SO3(roll[1], pitch[1], yaw[1], unit="rad")
-
-    #     q0 = SO32quat(R0)
-    #     q1 = SO32quat(R1)
-
-    #     q2 = quat_mult_2(q0,q1)
-    #     # print(R)
-
+        # q1 = Quaternion(matrix=R1)
+        q2 = Quaternion(matrix=R2 , rtol=1e-05, atol=1e-05)
     #     R_0 = SO3.RPY((roll[0], pitch[0], yaw[0]), unit='rad', order='zyx')
     #     R_1 = SO3.RPY((roll[1], pitch[1], yaw[1]), unit='rad', order='zyx')
     #     q_0 = UQ(R_0)

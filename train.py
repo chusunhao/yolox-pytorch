@@ -135,7 +135,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_Epoch = 0
     Freeze_Epoch = 50
-    Freeze_batch_size = 32
+    Freeze_batch_size = 4
     # ------------------------------------------------------------------#
     #   解冻阶段训练参数
     #   此时模型的主干不被冻结了，特征提取网络会发生改变
@@ -400,7 +400,7 @@ if __name__ == "__main__":
         # ---------------------------------------#
         train_dataset = YoloDataset(train_lines, input_shape, num_classes, epoch_length=UnFreeze_Epoch, \
                                     mosaic=mosaic, mixup=mixup, mosaic_prob=mosaic_prob, mixup_prob=mixup_prob,
-                                    train=False, special_aug_ratio=special_aug_ratio)
+                                    train=True, special_aug_ratio=special_aug_ratio)
         val_dataset = YoloDataset(val_lines, input_shape, num_classes, epoch_length=UnFreeze_Epoch, \
                                   mosaic=False, mixup=False, mosaic_prob=0, mixup_prob=0, train=False,
                                   special_aug_ratio=0)

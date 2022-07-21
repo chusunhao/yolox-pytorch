@@ -5,8 +5,9 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data.dataset import Dataset
-
+from pyquaternion import Quaternion
 from utils.utils import cvtColor, preprocess_input
+from imgaug import augmenters as iaa
 
 
 class YoloDataset(Dataset):
@@ -14,6 +15,7 @@ class YoloDataset(Dataset):
                  mosaic, mixup, mosaic_prob, mixup_prob, train, special_aug_ratio=0.7):
         super(YoloDataset, self).__init__()
         self.annotation_lines = annotation_lines
+        # self.check_annotation()
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.epoch_length = epoch_length
@@ -26,6 +28,18 @@ class YoloDataset(Dataset):
 
         self.epoch_now = -1
         self.length = len(self.annotation_lines)
+        self.K = np.array([[1744.92206139719, 0, 737.272795902663], [0, 1746.58640701753, 528.471960188736], [0, 0, 1]])
+
+    # def check_annotation(self):
+    #     for line in self.annotation_lines:
+    #         line = line.split()
+    #
+    #         image_path = line[0]
+    #         box = np.array(list(map(int, line[1].split(','))))[np.newaxis]
+    #         pose = np.array(list(map(float, line[2].split(','))))[np.newaxis]
+    #         assert image_path is not None
+    #         assert box.shape[-1] == 5
+    #         assert pose.shape[-1] == 7
 
     def __len__(self):
         return self.length
@@ -75,7 +89,7 @@ class YoloDataset(Dataset):
         # ------------------------------#
         #   获得预测框
         # ------------------------------#
-        box = np.array(list(map(float, line[1].split(','))))[np.newaxis]
+        box = np.array(list(map(int, line[1].split(','))))[np.newaxis]
         pose = np.array(list(map(float, line[2].split(','))))[np.newaxis]
 
         if not random:
@@ -110,54 +124,83 @@ class YoloDataset(Dataset):
             return image_data, box, pose
 
         # ------------------------------------------#
-        #   对图像进行缩放并且进行长和宽的扭曲
+        #   对图像进行投影变换进行增强
         # ------------------------------------------#
-        new_ar = iw / ih * self.rand(1 - jitter, 1 + jitter) / self.rand(1 - jitter, 1 + jitter)
-        scale = self.rand(.25, 2)
-        if new_ar < 1:
-            nh = int(scale * h)
-            nw = int(nh * new_ar)
-        else:
-            nw = int(scale * w)
-            nh = int(nw / new_ar)
-        image = image.resize((nw, nh), Image.BICUBIC)
+        warp = self.rand() < .5
+        if warp:
+            # Camera Jitter Augmentation
+            axis = np.random.rand(3)
+            angle = 30 * (np.random.rand(1) - 0.5)
+            R_change = Quaternion(axis=axis, degrees=angle).rotation_matrix
+            t, q = pose[0][0:3], pose[0][3:]
+            image_data = np.array(image, np.uint8)
+            image_data, t, q, box = self.rotate_cam(image_data, t, q, box, R_change)
+            pose[0] = np.hstack((t, q))
+            image = Image.fromarray(image_data)
 
         # ------------------------------------------#
-        #   将图像多余的部分加上灰条
+        #   Resize和Padding
         # ------------------------------------------#
-        dx = int(self.rand(0, w - nw))
-        dy = int(self.rand(0, h - nh))
+        scale = min(w / iw, h / ih)
+        nw = int(iw * scale)
+        nh = int(ih * scale)
+        dx = (w - nw) // 2
+        dy = (h - nh) // 2
+
+        # ---------------------------------#
+        #   将图像多余的部分加上灰条
+        # ---------------------------------#
+        image = image.resize((nw, nh), Image.BICUBIC)
         new_image = Image.new('RGB', (w, h), (128, 128, 128))
         new_image.paste(image, (dx, dy))
-        image = new_image
+        image_data = np.array(new_image, np.uint8)
 
         # ------------------------------------------#
         #   翻转图像
         # ------------------------------------------#
-        flip = self.rand() < .5
-        if flip: image = image.transpose(Image.FLIP_LEFT_RIGHT)
+        # flip = self.rand() < .5
+        # if flip:
+        #     image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
-        image_data = np.array(image, np.uint8)
+        # image_data = np.array(image, np.uint8)
         # ---------------------------------#
         #   对图像进行色域变换
         #   计算色域变换的参数
         # ---------------------------------#
-        r = np.random.uniform(-1, 1, 3) * [hue, sat, val] + 1
-        # ---------------------------------#
-        #   将图像转到HSV上
-        # ---------------------------------#
-        hue, sat, val = cv2.split(cv2.cvtColor(image_data, cv2.COLOR_RGB2HSV))
-        dtype = image_data.dtype
-        # ---------------------------------#
-        #   应用变换
-        # ---------------------------------#
-        x = np.arange(0, 256, dtype=r.dtype)
-        lut_hue = ((x * r[0]) % 180).astype(dtype)
-        lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
-        lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
+        use_iaa = self.rand() < .9
+        if use_iaa:
+            # Image Augmentation Pipeline
+            aug_pipeline = iaa.Sequential([
+                iaa.AdditiveGaussianNoise(scale=0.1 * 255),
+                iaa.GaussianBlur(sigma=(0.0, 1.5)),
+                iaa.Add((-40, 40)),
+                iaa.Multiply((0.5, 2.0)),
+                iaa.CoarseDropout([0.0, 0.03], size_percent=(0.02, 0.1)),
+                iaa.AddElementwise((-40, 40)),  # to the pixels
+                # iaa.ElasticTransformation(alpha=90, sigma=9),  # water-like effect
+                # iaa.Cutout(),  # replace one squared area within the image by a constant intensity value
+                # iaa.Dropout(p=(0, 0.2)),
+                # iaa.Salt(0.1),
+                # iaa.Pepper(0.1)
+            ], random_order=True).to_deterministic()
+            image_data = aug_pipeline.augment_image(image_data)
 
-        image_data = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
-        image_data = cv2.cvtColor(image_data, cv2.COLOR_HSV2RGB)
+        # r = np.random.uniform(-1, 1, 3) * [hue, sat, val] + 1
+        # # ---------------------------------#
+        # #   将图像转到HSV上
+        # # ---------------------------------#
+        # hue, sat, val = cv2.split(cv2.cvtColor(image_data, cv2.COLOR_RGB2HSV))
+        # dtype = image_data.dtype
+        # # ---------------------------------#
+        # #   应用变换
+        # # ---------------------------------#
+        # x = np.arange(0, 256, dtype=r.dtype)
+        # lut_hue = ((x * r[0]) % 180).astype(dtype)
+        # lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
+        # lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
+        #
+        # image_data = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
+        # image_data = cv2.cvtColor(image_data, cv2.COLOR_HSV2RGB)
 
         # ---------------------------------#
         #   对真实框进行调整
@@ -166,7 +209,7 @@ class YoloDataset(Dataset):
             np.random.shuffle(box)
             box[:, [0, 2]] = box[:, [0, 2]] * nw / iw + dx
             box[:, [1, 3]] = box[:, [1, 3]] * nh / ih + dy
-            if flip: box[:, [0, 2]] = w - box[:, [2, 0]]
+            # if flip: box[:, [0, 2]] = w - box[:, [2, 0]]
             box[:, 0:2][box[:, 0:2] < 0] = 0
             box[:, 2][box[:, 2] > w] = w
             box[:, 3][box[:, 3] > h] = h
@@ -174,7 +217,7 @@ class YoloDataset(Dataset):
             box_h = box[:, 3] - box[:, 1]
             box = box[np.logical_and(box_w > 1, box_h > 1)]
 
-        return image_data, box
+        return image_data, box, pose
 
     def merge_bboxes(self, bboxes, cutx, cuty):
         merge_bbox = []
@@ -362,6 +405,59 @@ class YoloDataset(Dataset):
         else:
             new_boxes = np.concatenate([box_1, box_2], axis=0)
         return new_image, new_boxes
+
+    def rotate_cam(self, image, t, q, bbox, R_change):
+        """ Apply warping corresponding to a random camera rotation
+        Arguments:
+         - image: Input image
+         - t, q: Object pose (location,orientation)
+         - K: Camera intrinsics matrix
+         - R_change: camera rotation matrix
+        Return:
+            - image_warped: Output image
+            - t_new, q_new: Updated object pose
+        """
+
+        # Construct perspective matrix
+        h = self.K @ R_change.T @ np.linalg.inv(self.K)
+
+        height, width = image.shape[:2]
+        # Update pose
+        t_new = R_change.T @ t
+        puv = self.pinhole_model(t_new)
+        q_change = Quaternion(matrix=R_change)
+        q_new = (q_change.conjugate * Quaternion(q)).q
+
+        vertices_b = np.array([[-0.79, -0.3, -0.38],
+                               [-0.79, -0.3, 0.4],
+                               [-0.3, 0.3, -0.38],
+                               [-0.3, 0.3, 0.4],
+                               [0.79, -0.3, -0.38],
+                               [0.79, -0.3, 0.4],
+                               [0.35, 0.3, -0.38],
+                               [0.35, 0.3, 0.4]]) * 0.4
+
+        vertices_c = Quaternion(q_new).rotation_matrix @ vertices_b.transpose() + t_new[np.newaxis].repeat(8,
+                                                                                                           axis=0).transpose()
+        vertices_uv = self.pinhole_model(vertices_c).transpose()
+
+        x1, y1 = tuple(vertices_uv[:, :-1].min(axis=0))
+        x2, y2 = tuple(vertices_uv[:, :-1].max(axis=0))
+
+        bbox_new = np.array([[x1, y1, x2, y2, 0]])
+
+        warp_flag = (0 < x1 < x2 < width) and (0 < y1 < y2 < height)
+
+        if not warp_flag:
+            return image, t, q, bbox
+        else:
+            image_warped = cv2.warpPerspective(image, h, (width, height))
+
+            return image_warped, t_new, q_new, bbox_new
+
+    def pinhole_model(self, t):
+        p = self.K @ t
+        return p / p[-1]
 
 
 # DataLoader中collate_fn使用
