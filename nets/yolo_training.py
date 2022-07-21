@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 # Copyright (c) Megvii, Inc. and its affiliates.
+import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import math
 from copy import deepcopy
 from functools import partial
@@ -451,7 +453,12 @@ class YOLOLoss(nn.Module):
         #   matching_matrix     [num_gt, fg_mask]
         # ------------------------------------------------------------#
         n_candidate_k = min(10, pair_wise_ious.size(1))
+        # if torch.nan in pair_wise_ious:
+        # print(pair_wise_ious)
+        pair_wise_ious = torch.clamp(pair_wise_ious, min=0, max=1)
         topk_ious, _ = torch.topk(pair_wise_ious, n_candidate_k, dim=1)
+        if topk_ious.sum(1).int() < 1:
+            print(topk_ious)
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), min=1)
 
         for gt_idx in range(num_gt):
