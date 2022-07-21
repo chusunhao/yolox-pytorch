@@ -53,7 +53,7 @@ def decode_outputs(outputs, input_shape):
         # ---------------------------#
         #   根据特征层的高宽生成网格点
         # ---------------------------#
-        grid_y, grid_x = torch.meshgrid([torch.arange(h), torch.arange(w)])
+        grid_y, grid_x = torch.meshgrid([torch.arange(h), torch.arange(w)], indexing='ij')
         # ---------------------------#
         #   1, 6400, 2
         #   1, 1600, 2

@@ -167,7 +167,7 @@ class YoloDataset(Dataset):
         #   对图像进行色域变换
         #   计算色域变换的参数
         # ---------------------------------#
-        use_iaa = self.rand() < .9
+        use_iaa = self.rand() < 0.5
         if use_iaa:
             # Image Augmentation Pipeline
             aug_pipeline = iaa.Sequential([
@@ -446,7 +446,9 @@ class YoloDataset(Dataset):
 
         bbox_new = np.array([[x1, y1, x2, y2, 0]])
 
-        warp_flag = (0 < x1 < x2 < width) and (0 < y1 < y2 < height)
+        warp_flag = (0 < puv[0] < width) and (0 < puv[1] < height)
+        # warp_flag = (0 < x1 < x2 < width) and (0 < y1 < y2 < height)
+
 
         if not warp_flag:
             return image, t, q, bbox

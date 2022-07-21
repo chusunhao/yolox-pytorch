@@ -148,7 +148,7 @@ class YOLOLoss(nn.Module):
         grid = self.grids[k]
         hsize, wsize = output.shape[-2:]
         if grid.shape[2:4] != output.shape[2:4]:
-            yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)])
+            yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)], indexing='ij')
             grid = torch.stack((xv, yv), 2).view(1, hsize, wsize, 2).type(output.type())
             self.grids[k] = grid
         grid = grid.view(1, -1, 2)
