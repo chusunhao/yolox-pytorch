@@ -30,83 +30,103 @@ def pose_err(est_pose, gt_pose):
 
     return posit_err, rel_posit_err, orient_err
 
+def calculate_iou(pred, target):
+    assert pred.shape[0] == target.shape[0]
+
+    tl = torch.max(
+        (pred[:, :2] - pred[:, 2:] / 2), (target[:, :2] - target[:, 2:] / 2)
+    )
+    br = torch.min(
+        (pred[:, :2] + pred[:, 2:] / 2), (target[:, :2] + target[:, 2:] / 2)
+    )
+
+    area_p = torch.prod(pred[:, 2:], 1)
+    area_g = torch.prod(target[:, 2:], 1)
+
+    en = (tl < br).type(tl.type()).prod(dim=1)
+    area_i = torch.prod(br - tl, 1) * en
+    area_u = area_p + area_g - area_i
+    iou = (area_i) / (area_u + 1e-16)
+    return iou
+
 
 def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callback, optimizer, epoch, epoch_step,
                   epoch_step_val, gen, gen_val, Epoch, cuda, fp16, scaler, save_period, save_dir, local_rank=0):
     loss = 0
     val_loss = 0
 
-    if local_rank == 0:
-        print('Start Train')
-        pbar = tqdm(total=epoch_step, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
-    model_train.train()
-    for iteration, batch in enumerate(gen):
-        if iteration >= epoch_step:
-            break
-
-        images, targets, poses = batch[0], batch[1], batch[2]
-        with torch.no_grad():
-            if cuda:
-                images = images.cuda(local_rank)
-                targets = [ann.cuda(local_rank) for ann in targets]
-                poses = [ann.cuda(local_rank) for ann in poses]
-        # ----------------------#
-        #   清零梯度
-        # ----------------------#
-        optimizer.zero_grad()
-        if not fp16:
-            # ----------------------#
-            #   前向传播
-            # ----------------------#
-            outputs = model_train(images)
-
-            # ----------------------#
-            #   计算损失
-            # ----------------------#
-            loss_value = yolo_loss(outputs, targets, poses)
-
-            # ----------------------#
-            #   反向传播
-            # ----------------------#
-            loss_value.backward()
-            optimizer.step()
-        else:
-            from torch.cuda.amp import autocast
-            with autocast():
-                outputs = model_train(images)
-                # ----------------------#
-                #   计算损失
-                # ----------------------#
-                loss_value = yolo_loss(outputs, targets, poses)
-
-            # ----------------------#
-            #   反向传播
-            # ----------------------#
-            scaler.scale(loss_value).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        if ema:
-            ema.update(model_train)
-
-        loss += loss_value.item()
-
-        if local_rank == 0:
-            pbar.set_postfix(**{'loss': loss / (iteration + 1),
-                                'lr': get_lr(optimizer)})
-            pbar.update(1)
-
-    if local_rank == 0:
-        pbar.close()
-        print('Finish Train')
-        print('Start Validation')
-        pbar = tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
+    # if local_rank == 0:
+    #     print('Start Train')
+    #     pbar = tqdm(total=epoch_step, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
+    # model_train.train()
+    # for iteration, batch in enumerate(gen):
+    #     if iteration >= epoch_step:
+    #         break
+    #
+    #     images, targets, poses = batch[0], batch[1], batch[2]
+    #     with torch.no_grad():
+    #         if cuda:
+    #             images = images.cuda(local_rank)
+    #             targets = [ann.cuda(local_rank) for ann in targets]
+    #             poses = [ann.cuda(local_rank) for ann in poses]
+    #     # ----------------------#
+    #     #   清零梯度
+    #     # ----------------------#
+    #     optimizer.zero_grad()
+    #     if not fp16:
+    #         # ----------------------#
+    #         #   前向传播
+    #         # ----------------------#
+    #         outputs = model_train(images)
+    #
+    #         # ----------------------#
+    #         #   计算损失
+    #         # ----------------------#
+    #         loss_value = yolo_loss(outputs, targets, poses)
+    #
+    #         # ----------------------#
+    #         #   反向传播
+    #         # ----------------------#
+    #         loss_value.backward()
+    #         optimizer.step()
+    #     else:
+    #         from torch.cuda.amp import autocast
+    #         with autocast():
+    #             outputs = model_train(images)
+    #             # ----------------------#
+    #             #   计算损失
+    #             # ----------------------#
+    #             loss_value = yolo_loss(outputs, targets, poses)
+    #
+    #         # ----------------------#
+    #         #   反向传播
+    #         # ----------------------#
+    #         scaler.scale(loss_value).backward()
+    #         scaler.step(optimizer)
+    #         scaler.update()
+    #     if ema:
+    #         ema.update(model_train)
+    #
+    #     loss += loss_value.item()
+    #
+    #     if local_rank == 0:
+    #         pbar.set_postfix(**{'loss': loss / (iteration + 1),
+    #                             'lr': get_lr(optimizer)})
+    #         pbar.update(1)
+    #
+    # if local_rank == 0:
+    #     pbar.close()
+    #     print('Finish Train')
+    #     print('Start Validation')
+    #     pbar = tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
 
     if ema:
         model_train_eval = ema.ema
     else:
         model_train_eval = model_train.eval()
 
-    stats = {"posit_err": [],
+    stats = {"iou": [],
+             "posit_err": [],
              "rel_posit_err": [],
              "orient_err": []}
 
@@ -139,7 +159,10 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
                                           image_shape=[1080, 1440], letterbox_image=True, maxdet=1)
 
             # Evaluate error
-            est_pose = torch.tensor(results).squeeze()[:, -12:].cuda()
+            gt_bbox = torch.cat(targets)[:, :4]
+            est_bbox = torch.tensor(np.array(results)).squeeze()[:, :4].cuda()
+            iou = calculate_iou(est_bbox, gt_bbox)
+            est_pose = torch.tensor(np.array(results)).squeeze()[:, -12:].cuda()
             gt_pose = torch.cat(poses)
             posit_err, rel_posit_err, orient_err = pose_err(est_pose, gt_pose)
 
