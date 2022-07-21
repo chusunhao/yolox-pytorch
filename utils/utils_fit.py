@@ -36,67 +36,67 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
     loss = 0
     val_loss = 0
 
+    # if local_rank == 0:
+    #     print('Start Train')
+    #     pbar = tqdm(total=epoch_step, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
+    # model_train.train()
+    # for iteration, batch in enumerate(gen):
+    #     if iteration >= epoch_step:
+    #         break
+    #
+    #     images, targets, poses = batch[0], batch[1], batch[2]
+    #     with torch.no_grad():
+    #         if cuda:
+    #             images = images.cuda(local_rank)
+    #             targets = [ann.cuda(local_rank) for ann in targets]
+    #             poses = [ann.cuda(local_rank) for ann in poses]
+    #     # ----------------------#
+    #     #   清零梯度
+    #     # ----------------------#
+    #     optimizer.zero_grad()
+    #     if not fp16:
+    #         # ----------------------#
+    #         #   前向传播
+    #         # ----------------------#
+    #         outputs = model_train(images)
+    #
+    #         # ----------------------#
+    #         #   计算损失
+    #         # ----------------------#
+    #         loss_value = yolo_loss(outputs, targets, poses)
+    #
+    #         # ----------------------#
+    #         #   反向传播
+    #         # ----------------------#
+    #         loss_value.backward()
+    #         optimizer.step()
+    #     else:
+    #         from torch.cuda.amp import autocast
+    #         with autocast():
+    #             outputs = model_train(images)
+    #             # ----------------------#
+    #             #   计算损失
+    #             # ----------------------#
+    #             loss_value = yolo_loss(outputs, targets, poses)
+    #
+    #         # ----------------------#
+    #         #   反向传播
+    #         # ----------------------#
+    #         scaler.scale(loss_value).backward()
+    #         scaler.step(optimizer)
+    #         scaler.update()
+    #     if ema:
+    #         ema.update(model_train)
+    #
+    #     loss += loss_value.item()
+    #
+    #     if local_rank == 0:
+    #         pbar.set_postfix(**{'loss': loss / (iteration + 1),
+    #                             'lr': get_lr(optimizer)})
+    #         pbar.update(1)
+
     if local_rank == 0:
-        print('Start Train')
-        pbar = tqdm(total=epoch_step, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
-    model_train.train()
-    for iteration, batch in enumerate(gen):
-        if iteration >= epoch_step:
-            break
-
-        images, targets, poses = batch[0], batch[1], batch[2]
-        with torch.no_grad():
-            if cuda:
-                images = images.cuda(local_rank)
-                targets = [ann.cuda(local_rank) for ann in targets]
-                poses = [ann.cuda(local_rank) for ann in poses]
-        # ----------------------#
-        #   清零梯度
-        # ----------------------#
-        optimizer.zero_grad()
-        if not fp16:
-            # ----------------------#
-            #   前向传播
-            # ----------------------#
-            outputs = model_train(images)
-
-            # ----------------------#
-            #   计算损失
-            # ----------------------#
-            loss_value = yolo_loss(outputs, targets, poses)
-
-            # ----------------------#
-            #   反向传播
-            # ----------------------#
-            loss_value.backward()
-            optimizer.step()
-        else:
-            from torch.cuda.amp import autocast
-            with autocast():
-                outputs = model_train(images)
-                # ----------------------#
-                #   计算损失
-                # ----------------------#
-                loss_value = yolo_loss(outputs, targets, poses)
-
-            # ----------------------#
-            #   反向传播
-            # ----------------------#
-            scaler.scale(loss_value).backward()
-            scaler.step(optimizer)
-            scaler.update()
-        if ema:
-            ema.update(model_train)
-
-        loss += loss_value.item()
-
-        if local_rank == 0:
-            pbar.set_postfix(**{'loss': loss / (iteration + 1),
-                                'lr': get_lr(optimizer)})
-            pbar.update(1)
-
-    if local_rank == 0:
-        pbar.close()
+        # pbar.close()
         print('Finish Train')
         print('Start Validation')
         pbar = tqdm(total=epoch_step_val, desc=f'Epoch {epoch + 1}/{Epoch}', postfix=dict, mininterval=0.3)
@@ -118,6 +118,7 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
             if cuda:
                 images = images.cuda(local_rank)
                 targets = [ann.cuda(local_rank) for ann in targets]
+                poses = [ann.cuda(local_rank) for ann in poses]
             # ----------------------#
             #   清零梯度
             # ----------------------#
@@ -136,7 +137,7 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
 
             # Evaluate error
             est_pose = outputs[:, -12:]
-            gt_pose = poses
+            gt_pose = torch.cat(poses)
             posit_err, rel_posit_err, orient_err = pose_err(est_pose, gt_pose)
 
             # Collect statistics

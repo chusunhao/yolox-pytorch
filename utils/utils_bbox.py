@@ -86,8 +86,7 @@ def decode_outputs(outputs, input_shape):
     loc_preds = recoverXYZ(bbox_preds, offset_preds, depth_preds)
     outputs[..., 6:9] = loc_preds
     rot_preds = outputs[:, :, 9:]
-    b, num_channels, _ = rot_preds.shape
-    outputs[..., 9:] = se3lib.symmetric_orthogonalization(rot_preds.view(-1, 9)).reshape(b, num_channels, 9)
+    outputs[..., 9:] = se3lib.symmetric_orthogonalization(rot_preds.flatten(start_dim=0, end_dim=1)).view(rot_preds.shape)
 
     # -----------------#
     #   归一化bbox
@@ -101,7 +100,7 @@ def recoverXYZ(bbox, offset, depth):
     K = torch.tensor(
         [[1744.92206139719, 0, 737.272795902663], [0, 1746.58640701753, 528.471960188736], [0, 0, 1]]).cuda()
     b, num_anchors, _ = bbox.shape
-    p = torch.concat(((bbox[..., 0:2] + offset), torch.ones_like(depth)), dim=-1)
+    p = torch.cat(((bbox[..., 0:2] + offset), torch.ones_like(depth)), dim=-1)
     P = torch.matmul(torch.linalg.inv(K).repeat(b * num_anchors, 1, 1), (depth.repeat(1, 1, 3) * p).view(-1, 3, 1))
     return P.view(b, num_anchors, 3)
 
