@@ -426,9 +426,9 @@ def symmetric_orthogonalization(x):
     Output hase size [batch_size, 3, 3], where each inner 3x3 matrix is in SO(3).
     """
     m = x.view(-1, 3, 3)
-    u, s, v = torch.svd(m)
+    u, s, v = torch.linalg.svd(m)
     vt = torch.transpose(v, 1, 2)
-    det = torch.det(torch.matmul(u, vt))
+    det = torch.linalg.det(torch.matmul(u, vt))
     det = det.view(-1, 1, 1)
     vt = torch.cat((vt[:, :2, :], vt[:, -1:, :] * det), 1)
     r = torch.matmul(u, vt)
