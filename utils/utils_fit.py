@@ -3,7 +3,7 @@ import os
 import torch
 from tqdm import tqdm
 import numpy as np
-from utils.utils_bbox import decode_outputs
+from utils.utils_bbox import decode_outputs, non_max_suppression
 
 from utils.utils import get_lr
 import utils.se3lib as se3lib
@@ -135,8 +135,11 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
 
             outputs = decode_outputs(outputs, list(images.shape[-2:]))
 
+            results = non_max_suppression(outputs, num_classes=1, input_shape=[640, 640],
+                                          image_shape=[1080, 1440], letterbox_image=True, maxdet=1)
+
             # Evaluate error
-            est_pose = outputs[:, -12:]
+            est_pose = results[:, -12:]
             gt_pose = torch.cat(poses)
             posit_err, rel_posit_err, orient_err = pose_err(est_pose, gt_pose)
 
