@@ -81,10 +81,10 @@ def decode_outputs(outputs, input_shape):
     outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
 
     bbox_preds = outputs[:, :, :4]
-    offset_preds = outputs[:, :, 6:8]
-    depth_preds = outputs[:, :, 8:9]
-    loc_preds = recoverXYZ(bbox_preds, offset_preds, depth_preds)
-    outputs[..., 6:9] = loc_preds
+    # offset_preds = outputs[:, :, 6:8]
+    # depth_preds = outputs[:, :, 8:9]
+    # loc_preds = recoverXYZ(bbox_preds, offset_preds, depth_preds)
+    # outputs[..., 6:9] = loc_preds
     rot_preds = outputs[:, :, 9:]
     outputs[..., 9:] = se3lib.symmetric_orthogonalization(rot_preds.flatten(start_dim=0, end_dim=1)).view(rot_preds.shape)
 

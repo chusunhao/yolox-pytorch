@@ -173,17 +173,18 @@ class YOLOLoss(nn.Module):
         # -----------------------------------------------#
         #   [batch, n_anchors_all, 2]
         # -----------------------------------------------#
-        offset_preds = outputs[:, :, 6:8]
+        # offset_preds = outputs[:, :, 6:8]
         # -----------------------------------------------#
         #   [batch, n_anchors_all, 1]
         # -----------------------------------------------#
-        depth_preds = outputs[:, :, 8:9]
+        # depth_preds = outputs[:, :, 8:9]
         # -----------------------------------------------#
         #   [batch, n_anchors_all, 9]
         # -----------------------------------------------#
         rot_preds = outputs[:, :, 9:]
 
-        loc_preds = self.recoverXYZ(bbox_preds, offset_preds, depth_preds)
+        # loc_preds = self.recoverXYZ(bbox_preds, offset_preds, depth_preds)
+        loc_preds = outputs[:, :, 6:9]
 
         total_num_anchors = outputs.shape[1]
         # -----------------------------------------------#
