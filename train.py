@@ -146,7 +146,7 @@ if __name__ == "__main__":
     #   Unfreeze_batch_size     模型在解冻后的batch_size
     # ------------------------------------------------------------------#
     UnFreeze_Epoch = 300
-    Unfreeze_batch_size = 8
+    Unfreeze_batch_size = 4
     # ------------------------------------------------------------------#
     #   Freeze_Train    是否进行冻结训练
     #                   默认先冻结主干训练后解冻训练。
