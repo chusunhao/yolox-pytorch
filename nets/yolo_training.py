@@ -148,7 +148,8 @@ class YOLOLoss(nn.Module):
         grid = self.grids[k]
         hsize, wsize = output.shape[-2:]
         if grid.shape[2:4] != output.shape[2:4]:
-            yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)], indexing='ij')
+            # yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)], indexing='ij')
+            yv, xv = torch.meshgrid([torch.arange(hsize), torch.arange(wsize)])
             grid = torch.stack((xv, yv), 2).view(1, hsize, wsize, 2).type(output.type())
             self.grids[k] = grid
         grid = grid.view(1, -1, 2)
@@ -267,6 +268,7 @@ class YOLOLoss(nn.Module):
         loss_rot = (self.orient_loss(rot_preds.view(-1, 9)[fg_masks], rot_targets)).sum()
         reg_weight = 5.0
         loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_loc + loss_rot
+        # loss = reg_weight * loss_iou + loss_obj + loss_cls
 
         return loss / num_fg
 

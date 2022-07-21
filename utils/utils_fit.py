@@ -151,7 +151,7 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
             # ----------------------#
             #   计算损失
             # ----------------------#
-            loss_value = yolo_loss(outputs, targets, poses)
+            # loss_value = yolo_loss(outputs, targets, poses)
 
             outputs = decode_outputs(outputs, list(images.shape[-2:]))
 
@@ -167,27 +167,30 @@ def fit_one_epoch(model_train, model, ema, yolo_loss, loss_history, eval_callbac
             posit_err, rel_posit_err, orient_err = pose_err(est_pose, gt_pose)
 
             # Collect statistics
+            stats["iou"].append(iou.cpu().numpy())
             stats["posit_err"].append(posit_err.cpu().numpy())
             stats["rel_posit_err"].append(rel_posit_err.cpu().numpy())
             stats["orient_err"].append(orient_err.cpu().numpy())
 
 
-        val_loss += loss_value.item()
-        # if local_rank == 0:
-        #     pbar.set_postfix(**{'val_loss': val_loss / (iteration + 1),
-            #                     "iou": np.mean(stats["iou"]),
-            #                     "posit_err": np.mean(stats["posit_err"]),
-            #                     "rel_posit_err": np.mean(stats["rel_posit_err"]),
-            #                     "orient_err": np.mean(stats["orient_err"])})
-            # pbar.update(1)
+        # val_loss += loss_value.item()
+        val_loss += 0
 
-    # if local_rank == 0:
-    #     pbar.close()
-    #     print('Finish Validation')
-    #     loss_history.append_loss(epoch + 1, loss / epoch_step, val_loss / epoch_step_val)
-    #     eval_callback.on_epoch_end(epoch + 1, model_train_eval)
-    #     print('Epoch:' + str(epoch + 1) + '/' + str(Epoch))
-    #     print('Total Loss: %.3f || Val Loss: %.3f ' % (loss / epoch_step, val_loss / epoch_step_val))
+        if local_rank == 0:
+            pbar.set_postfix(**{'val_loss': val_loss / (iteration + 1),
+                                "iou": np.mean(stats["iou"]),
+                                "posit_err": np.mean(stats["posit_err"]),
+                                "rel_posit_err": np.mean(stats["rel_posit_err"]),
+                                "orient_err": np.mean(stats["orient_err"])})
+            pbar.update(1)
+
+    if local_rank == 0:
+        pbar.close()
+        print('Finish Validation')
+        loss_history.append_loss(epoch + 1, loss / epoch_step, val_loss / epoch_step_val)
+        eval_callback.on_epoch_end(epoch + 1, model_train_eval)
+        print('Epoch:' + str(epoch + 1) + '/' + str(Epoch))
+        print('Total Loss: %.3f || Val Loss: %.3f ' % (loss / epoch_step, val_loss / epoch_step_val))
 
         # -----------------------------------------------#
         #   保存权值

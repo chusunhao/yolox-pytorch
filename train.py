@@ -136,7 +136,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------#
     Init_Epoch = 0
     Freeze_Epoch = 50
-    Freeze_batch_size = 2
+    Freeze_batch_size = 32
     # ------------------------------------------------------------------#
     #   解冻阶段训练参数
     #   此时模型的主干不被冻结了，特征提取网络会发生改变
@@ -147,12 +147,12 @@ if __name__ == "__main__":
     #   Unfreeze_batch_size     模型在解冻后的batch_size
     # ------------------------------------------------------------------#
     UnFreeze_Epoch = 300
-    Unfreeze_batch_size = 4
+    Unfreeze_batch_size = 16
     # ------------------------------------------------------------------#
     #   Freeze_Train    是否进行冻结训练
     #                   默认先冻结主干训练后解冻训练。
     # ------------------------------------------------------------------#
-    Freeze_Train = True
+    Freeze_Train = False
 
     # ------------------------------------------------------------------#
     #   其它训练参数：学习率、优化器、学习率下降有关
@@ -364,22 +364,22 @@ if __name__ == "__main__":
         # ---------------------------------------#
         #   根据optimizer_type选择优化器
         # ---------------------------------------#
-        # pg0, pg1, pg2 = [], [], []
-        # for k, v in model.named_modules():
-        #     if hasattr(v, "bias") and isinstance(v.bias, nn.Parameter):
-        #         pg2.append(v.bias)
-        #     if isinstance(v, nn.BatchNorm2d) or "bn" in k:
-        #         pg0.append(v.weight)
-        #     elif hasattr(v, "weight") and isinstance(v.weight, nn.Parameter):
-        #         pg1.append(v.weight)
-        # optimizer = {
-        #     'adam': optim.Adam(pg0, Init_lr_fit, betas=(momentum, 0.999)),
-        #     'sgd': optim.SGD(pg0, Init_lr_fit, momentum=momentum, nesterov=True)
-        # }[optimizer_type]
-        # optimizer.add_param_group({"params": pg1, "weight_decay": weight_decay})
-        # optimizer.add_param_group({"params": pg2})
-        trainable_params = filter(lambda x: x.requires_grad, model.parameters())
-        optimizer = torch.optim.AdamW(trainable_params, lr=Init_lr_fit)
+        pg0, pg1, pg2 = [], [], []
+        for k, v in model.named_modules():
+            if hasattr(v, "bias") and isinstance(v.bias, nn.Parameter):
+                pg2.append(v.bias)
+            if isinstance(v, nn.BatchNorm2d) or "bn" in k:
+                pg0.append(v.weight)
+            elif hasattr(v, "weight") and isinstance(v.weight, nn.Parameter):
+                pg1.append(v.weight)
+        optimizer = {
+            'adam': optim.Adam(pg0, Init_lr_fit, betas=(momentum, 0.999)),
+            'sgd': optim.SGD(pg0, Init_lr_fit, momentum=momentum, nesterov=True)
+        }[optimizer_type]
+        optimizer.add_param_group({"params": pg1, "weight_decay": weight_decay})
+        optimizer.add_param_group({"params": pg2})
+        # trainable_params = filter(lambda x: x.requires_grad, model.parameters())
+        # optimizer = torch.optim.AdamW(trainable_params, lr=Init_lr_fit)
 
         # ---------------------------------------#
         #   获得学习率下降的公式
